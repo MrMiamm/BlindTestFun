@@ -1,0 +1,60 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main  # Déclenchement sur chaque push sur la branche main
+
+  workflow_dispatch:  # Permet de déclencher manuellement avec validation
+    inputs:
+      approve_deployment:
+        description: "Approve deployment to production?"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  deploy_to_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to test environment
+        run: |
+          echo "Deploying to test environment..."
+          scp -r ./* user@vps:/var/test/blind-test.fun/html
+
+  manual_approval:
+    needs: deploy_to_test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Await manual approval
+        if: ${{ github.event_name == 'push' }}
+        run: echo "Waiting for manual approval before deploying to production."
+
+  deploy_to_production:
+    if: ${{ github.event.inputs.approve_deployment == 'true' }}
+    needs: manual_approval
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to production environment
+        run: |
+          echo "Deploying to production environment..."
+          scp -r ./* user@vps:/var/www/blind-test.fun/html

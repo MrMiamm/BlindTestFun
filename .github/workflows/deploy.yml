@@ -1,60 +1,32 @@
 name: Deploy to VPS
 
 on:
-  push:
-    branches:
-      - main  # Déclenchement sur chaque push sur la branche main
-
-  workflow_dispatch:  # Permet de déclencher manuellement avec validation
-    inputs:
-      approve_deployment:
-        description: "Approve deployment to production?"
-        required: true
-        default: false
-        type: boolean
+  workflow_dispatch:
 
 jobs:
-  deploy_to_test:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.5.3
+      # 2. Setup SSH
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.1
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy to test environment
+      # 3. Copy files via SSH to the VPS
+      - name: Deploy files to VPS
         run: |
-          echo "Deploying to test environment..."
-          scp -r ./* user@vps:/var/test/blind-test.fun/html
+          rsync -avz --delete \
+          -e "ssh -o StrictHostKeyChecking=no" \
+          ./ \
+          root@85.31.239.34:/var/www/blind-test.fun/html
 
-  manual_approval:
-    needs: deploy_to_test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Await manual approval
-        if: ${{ github.event_name == 'push' }}
-        run: echo "Waiting for manual approval before deploying to production."
-
-  deploy_to_production:
-    if: ${{ github.event.inputs.approve_deployment == 'true' }}
-    needs: manual_approval
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Deploy to production environment
+      # Optional: Restart the web server if needed (adjust as per your server setup)
+      - name: Restart web server
         run: |
-          echo "Deploying to production environment..."
-          scp -r ./* user@vps:/var/www/blind-test.fun/html
+          ssh root@85.31.239.34 "sudo systemctl restart apache2"
